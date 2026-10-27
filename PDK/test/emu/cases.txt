@@ -1,0 +1,558 @@
+# Hand-computed expectations for the PDK module (flags: ZF=1 CF=2 AC=4 OV=8; CF/AC are carries for additions and
+# borrows for subtractions).  Worked out from the Free PDK instruction tables and the Padauk datasheets,
+# never copied from the module's output.  See emu-test.sh for the format.
+
+############################ PDK14 (PMS132 / PMS152) ############################
+case add_basic isa 14
+asm MOV A,#0x12 ; ADD A,#0x34
+code 2F12 2834
+expect A 0x46
+expect flag 0
+end
+
+case add_signed_overflow isa 14
+# 0x7f + 1 = 0x80: AC (0xf+1 > 0xf) and OV, no carry, not zero
+asm MOV A,#0x7f ; ADD A,#0x01
+code 2F7F 2801
+expect A 0x80
+expect flag 0xC
+end
+
+case add_carry_out isa 14
+# 0xff + 1 = 0x100: A=0, ZF CF AC
+asm MOV A,#0xff ; ADD A,#0x01
+code 2FFF 2801
+expect A 0
+expect flag 0x7
+end
+
+case sub_borrow isa 14
+# 0 - 1: A=0xff, borrow (CF), aux borrow (AC), no overflow
+asm MOV A,#0x00 ; SUB A,#0x01
+code 2F00 2901
+expect A 0xFF
+expect flag 0x6
+end
+
+case sub_equal isa 14
+asm MOV A,#0x05 ; SUB A,#0x05
+code 2F05 2905
+expect A 0
+expect flag 0x1
+end
+
+case sub_signed_overflow isa 14
+# 0x80 - 1 = 0x7f: AC borrow (0 < 1) and OV
+asm MOV A,#0x80 ; SUB A,#0x01
+code 2F80 2901
+expect A 0x7F
+expect flag 0xC
+end
+
+case subc_uses_borrow isa 14
+# 0-1 sets CF; then 5 - CF = 4, no flags
+asm MOV A,#0x00 ; SUB A,#0x01 ; MOV A,#0x05 ; SUBC A
+code 2F00 2901 2F05 0061
+expect A 4
+expect flag 0
+end
+
+case addc_uses_carry isa 14
+asm MOV A,#0xff ; ADD A,#0x01 ; MOV A,#0x10 ; ADDC A
+code 2FFF 2801 2F10 0060
+expect A 0x11
+expect flag 0
+end
+
+case and_zero isa 14
+asm MOV A,#0xf0 ; AND A,#0x0f
+code 2FF0 2C0F
+expect A 0
+expect flag 1
+end
+
+case src_rotates_through_carry isa 14
+# CF=1 from 0xff+1 (flags 7); SRC A: A = 0x81, CF <- old bit0 = 0, ZF/AC kept: flag 5
+asm MOV A,#0xff ; ADD A,#0x01 ; MOV A,#0x02 ; SRC A
+code 2FFF 2801 2F02 006C
+expect A 0x81
+expect flag 5
+end
+
+case sl_sets_carry isa 14
+asm MOV A,#0x81 ; SL A
+code 2F81 006B
+expect A 0x02
+expect flag 2
+end
+
+case swap_nibbles isa 14
+asm MOV A,#0x3c ; SWAP A
+code 2F3C 006E
+expect A 0xC3
+end
+
+case neg_then_not isa 14
+asm MOV A,#0x01 ; NEG A ; NOT A
+code 2F01 0069 0068
+expect A 0
+expect flag 1
+end
+
+case inc_memory isa 14
+asm MOV A,#0x55 ; MOV 0x0010,A ; INC 0x0010
+code 2F55 0B90 1210
+expect ram:10 0x56
+expect flag 0
+end
+
+case xch_memory isa 14
+asm MOV A,#0x01 ; MOV 0x0008,A ; MOV A,#0x02 ; XCH 0x0008
+code 2F01 0B88 2F02 1388
+expect ram:8 2
+expect A 1
+end
+
+case dzsn_skips_when_zero isa 14
+# [4]=1; DZSN [4] -> 0 and skips "MOV A,#0x99"; flag ZF (1-1, no borrow)
+asm MOV A,#0x01 ; MOV 0x0004,A ; DZSN 0x0004 ; MOV A,#0x99 ; MOV A,#0x77
+code 2F01 0B84 1184 2F99 2F77
+expect A 0x77
+expect ram:4 0
+expect flag 1
+end
+
+case ceqsn_not_equal_runs_next isa 14
+# 3 - 4: borrow, aux borrow; not equal -> no skip, A=9
+asm MOV A,#0x03 ; CEQSN A,#0x04 ; MOV A,#0x09
+code 2F03 2A04 2F09
+expect A 9
+expect flag 6
+end
+
+case ceqsn_equal_skips isa 14
+asm MOV A,#0x04 ; CEQSN A,#0x04 ; MOV A,#0x09 ; MOV A,#0x08
+code 2F04 2A04 2F09 2F08
+expect A 8
+expect flag 1
+end
+
+case izsn_a_skips_on_zero isa 14
+asm MOV A,#0xff ; IZSN A ; MOV A,#0x01 ; MOV A,#0x02
+code 2FFF 0062 2F01 2F02
+expect A 2
+expect flag 7
+end
+
+case t1sn_bit_set_skips isa 14
+asm T1SN 0x0020.2 ; MOV A,#0x01 ; MOV A,#0x02
+code 22A0 2F01 2F02
+set ram:20 0x04
+expect A 2
+end
+
+case t0sn_bit_set_does_not_skip isa 14
+asm T0SN 0x0020.2 ; MOV A,#0x01 ; MOV A,#0x02
+code 20A0 2F01 2F02
+set ram:20 0x04
+expect A 2
+end
+
+case set1_memory_bit isa 14
+asm SET1 0x0020.3
+code 26E0
+set ram:20 0x04
+expect ram:20 0x0C
+end
+
+case set0_memory_bit isa 14
+asm SET0 0x0020.3
+code 24E0
+set ram:20 0xFF
+expect ram:20 0xF7
+end
+
+case flag_is_io_register isa 14
+# MOV flag,A writes the flag bits themselves (ZF CF AC OV); SET1 flag.0 sets ZF
+asm MOV A,#0x0a ; MOV flag,A ; SET1 flag.0
+code 2F0A 0180 1E00
+expect flag 0x0B
+expect A 0x0A
+end
+
+case mov_a_io_updates_zf isa 14
+# MOV A,flag with flag=5: A=5, ZF recomputed from A (non-zero -> cleared): flag 4
+asm MOV A,flag
+code 01C0
+set flag 5
+expect A 5
+expect flag 4
+end
+
+case sp_is_io_register isa 14
+asm MOV A,#0x10 ; MOV sp,A
+code 2F10 0182
+expect sp 0x10
+end
+
+case pushaf isa 14
+asm PUSHAF
+code 0072
+set sp 0x10
+set A 0x5A
+set flag 0x0B
+expect ram:10 0x5A
+expect ram:11 0x0B
+expect sp 0x12
+end
+
+case popaf isa 14
+asm POPAF
+code 0073
+set sp 0x12
+set ram:10 0x33
+set ram:11 0x05
+expect A 0x33
+expect flag 5
+expect sp 0x10
+end
+
+case call_and_ret isa 14
+# CALL pushes the word address of the next instruction (1), RET pops it
+asm CALL 0x0004 ; MOV A,#0x02 ; GOTO 0x0006 ; MOV A,#0x00 ; MOV A,#0x01 ; RET
+code 3804 2F02 3006 2F00 2F01 007A
+set sp 0x20
+until 6
+expect A 2
+expect sp 0x20
+expect ram:20 1
+expect ram:21 0
+expect PC 6
+end
+
+case ret_k isa 14
+asm RET #0x42
+code 0242
+set sp 0x22
+set ram:20 5
+set ram:21 0
+until 5
+expect A 0x42
+expect sp 0x20
+expect PC 5
+end
+
+case pcadd_adds_to_its_own_address isa 14
+# PCADD at word 1 with A=2 continues at word 3
+asm MOV A,#0x02 ; PCADD A ; MOV A,#0xa2 ; MOV A,#0xb3
+code 2F02 0067 2FA2 2FB3
+until 4
+expect A 0xB3
+end
+
+case idxm_store isa 14
+asm MOV A,#0x30 ; MOV 0x0010,A ; MOV A,#0x77 ; IDXM 0x0010,A
+code 2F30 0B90 2F77 0390
+expect ram:30 0x77
+end
+
+case idxm_load isa 14
+asm IDXM A,0x0010
+code 0391
+set ram:10 0x30
+set ram:30 0x5C
+expect A 0x5C
+end
+
+case stt16_and_ldt16 isa 14
+asm STT16 0x0010 ; LDT16 0x0012
+code 0310 0313
+set ram:10 0x34
+set ram:11 0x12
+expect T16 0x1234
+expect ram:12 0x34
+expect ram:13 0x12
+end
+
+case nadd_is_add_of_negated_a isa 14
+# A <- M + NEG(A) = 10 - 3 = 7; addition 0x0a + 0xfd: CF, AC; no ZF/OV
+asm MOV A,#0x0a ; MOV 0x0005,A ; MOV A,#0x03 ; NADD A,0x0005
+code 2F0A 0B85 2F03 0705
+expect A 7
+expect flag 6
+end
+
+case swapc_io_bit isa 14
+# CF=1 (0xff+1) swaps with pa.3 (=0): pa=0x08, CF=0 -> flags 7 -> 5
+asm MOV A,#0xff ; ADD A,#0x01 ; SWAPC pa.3
+code 2FFF 2801 04D0
+expect pa 0x08
+expect flag 5
+end
+
+case engint_disgint isa 14
+asm ENGINT ; DISGINT ; ENGINT
+code 0078 0079 0078
+expect GIE 1
+end
+
+case broken_expectation_add isa 14 broken
+# 0x12 + 0x34 is 0x46, not 0x47: the harness must report this case as failing
+asm MOV A,#0x12 ; ADD A,#0x34
+code 2F12 2834
+expect A 0x47
+end
+
+############################ PDK13 (PMS150C) ############################
+case p13_add isa 13
+asm MOV A,#0x12 ; ADD A,#0x34
+code 1712 1034
+expect A 0x46
+expect flag 0
+end
+
+case p13_add_overflow isa 13
+asm MOV A,#0x7f ; ADD A,#0x01
+code 177F 1001
+expect A 0x80
+expect flag 0xC
+end
+
+case p13_sub_borrow isa 13
+asm MOV A,#0x00 ; SUB A,#0x01
+code 1700 1101
+expect A 0xFF
+expect flag 6
+end
+
+case p13_memory isa 13
+asm MOV A,#0x55 ; MOV 0x0010,A ; INC 0x0010 ; MOV A,0x0010
+code 1755 05D0 0910 07D0
+expect ram:10 0x56
+expect A 0x56
+end
+
+case p13_call_ret isa 13
+asm CALL 0x0004 ; MOV A,#0x02 ; GOTO 0x0006 ; MOV A,#0x00 ; MOV A,#0x01 ; RET
+code 1C04 1702 1806 1700 1701 003A
+set sp 0x20
+until 6
+expect A 2
+expect sp 0x20
+expect ram:20 1
+end
+
+case p13_set1_memory_bit isa 13
+asm SET1 0x0003.2
+code 0353
+expect ram:3 4
+end
+
+case p13_ret_k isa 13
+asm RET #0x42
+code 0142
+set sp 0x22
+set ram:20 5
+until 5
+expect A 0x42
+expect PC 5
+end
+
+case p13_stt16_ldt16 isa 13
+asm STT16 0x000a ; LDT16 0x000c
+code 00CA 00CD
+set ram:a 0x34
+set ram:b 0x12
+expect T16 0x1234
+expect ram:c 0x34
+expect ram:d 0x12
+end
+
+############################ PDK15 (PMS133 / PMS134) ############################
+case p15_add isa 15
+asm MOV A,#0x12 ; ADD A,#0x34
+code 5712 5034
+expect A 0x46
+expect flag 0
+end
+
+case p15_sub_overflow isa 15
+asm MOV A,#0x80 ; SUB A,#0x01
+code 5780 5101
+expect A 0x7F
+expect flag 0xC
+end
+
+case p15_memory_above_0x7f isa 15
+asm MOV A,#0x55 ; MOV 0x0090,A ; INC 0x0090
+code 5755 1790 2490
+expect ram:90 0x56
+end
+
+case p15_nmov isa 15
+asm NMOV A,0x0030
+code 0830
+set ram:30 1
+expect A 0xFF
+expect flag 0
+end
+
+case p15_swap_memory isa 15
+asm SWAP 0x0031
+code 0A31
+set ram:31 0x3C
+expect ram:31 0xC3
+end
+
+case p15_ldtabl isa 15
+# code word 0x40 = 0x1234; the pointer is the word at [0x10]
+asm LDTABL 0x0010
+code 0510
+set ram:10 0x40
+set ram:11 0
+set rom:40 0x1234
+expect A 0x34
+end
+
+case p15_ldtabh isa 15
+asm LDTABH 0x0010
+code 0511
+set ram:10 0x40
+set ram:11 0
+set rom:40 0x1234
+expect A 0x12
+end
+
+case p15_call_ret isa 15
+asm CALL 0x0004 ; MOV A,#0x02 ; GOTO 0x0006 ; MOV A,#0x00 ; MOV A,#0x01 ; RET
+code 7004 5702 6006 5700 5701 007A
+set sp 0x20
+until 6
+expect A 2
+expect sp 0x20
+expect ram:20 1
+end
+
+case p15_ldsptl isa 15
+asm LDSPTL
+code 0006
+set sp 0x10
+set ram:10 0x40
+set ram:11 0
+set rom:40 0x1234
+expect A 0x34
+end
+
+############################ PDK16 (PMC884) ############################
+case p16_store_above_0xff isa 16
+asm MOV A,#0x12 ; MOV 0x01f0,A
+code 1F12 5DF0
+expect ram:1f0 0x12
+end
+
+case p16_add_overflow isa 16
+asm MOV A,#0x7f ; ADD A,#0x01
+code 1F7F 1801
+expect A 0x80
+expect flag 0xC
+end
+
+case p16_pushw_popw isa 16
+asm PUSHW 0x0010 ; POPW 0x0012
+code 0411 0412
+set sp 0x20
+set ram:10 0x34
+set ram:11 0x12
+expect ram:20 0x34
+expect ram:21 0x12
+expect ram:12 0x34
+expect ram:13 0x12
+expect sp 0x20
+end
+
+case p16_igoto isa 16
+asm IGOTO 0x0010 ; MOV A,#0x11 ; MOV A,#0x22 ; MOV A,#0x33
+code 0610 1F11 1F22 1F33
+set ram:10 3
+set ram:11 0
+until 4
+expect A 0x33
+end
+
+case p16_icall isa 16
+asm ICALL 0x0010 ; MOV A,#0x01 ; GOTO 0x0006 ; NOP ; MOV A,#0x09 ; RET
+code 0611 1F01 C006 0000 1F09 003A
+set sp 0x20
+set ram:10 4
+set ram:11 0
+until 6
+expect A 1
+expect sp 0x20
+expect ram:20 1
+end
+
+case p16_tog_io_bit isa 16
+asm TOG pa.3
+code 28D0
+expect pa 0x08
+end
+
+case p16_xor_a_io isa 16
+asm XOR A,pa
+code 1050
+set pa 0xF0
+set A 0xFF
+expect A 0x0F
+expect flag 0
+end
+
+case p16_nmov_high_memory isa 16
+asm NMOV A,0x0100
+code 3100
+set ram:100 1
+expect A 0xFF
+end
+
+case p16_ldtabh isa 16
+asm LDTABH 0x0010
+code 0A11
+set ram:10 0x40
+set ram:11 0
+set rom:40 0x1234
+expect A 0x12
+end
+
+case p16_delay_clears_a isa 16
+asm DELAY #0x05
+code 0E05
+set A 0x77
+expect A 0
+end
+
+case p16_call_ret_13bit_target isa 16
+asm CALL 0x0004 ; MOV A,#0x02 ; GOTO 0x0006 ; MOV A,#0x00 ; MOV A,#0x01 ; RET
+code E004 1F02 C006 1F00 1F01 003A
+set sp 0x20
+until 6
+expect A 2
+expect sp 0x20
+expect ram:20 1
+end
+
+case broken_expectation_p13 isa 13 broken
+asm MOV A,#0x12 ; ADD A,#0x34
+code 1712 1034
+expect A 0x47
+end
+
+case broken_expectation_p15 isa 15 broken
+asm MOV A,#0x12 ; ADD A,#0x34
+code 5712 5034
+expect A 0x47
+end
+
+case broken_expectation_p16 isa 16 broken
+asm MOV A,#0x12 ; ADD A,#0x34
+code 1F12 1834
+expect A 0x47
+end
