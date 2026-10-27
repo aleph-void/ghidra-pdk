@@ -1,7 +1,7 @@
 // Runs single instructions in Ghidra's emulator (EmulatorHelper) for a list of randomised cases and
 // writes the resulting state, so that test/sem_diff.py can compare it with the ucsim simulator.
 //
-// input line:  <id> <opcode hex> <A hex> <flag hex> <sp hex> <ram hex string (RAMN bytes)> [<rom word hex>@<addr hex>]...
+// input line:  <id> <opcode hex> <A hex> <flag hex> <sp hex> <ram hex string (RAMN bytes)> [<rom word hex>@<addr hex> | reg:<name>=<hex>]...
 // output line: <id> OK <A> <flag> <sp> <pc hex> <ram hex string>   or   <id> ERR <message>
 // Script args: <cases> <out>
 //@category Testing
@@ -40,6 +40,11 @@ public class SemCheck extends GhidraScript {
 					// nops after it (skip instructions) and, if given, extra code words
 					emu.writeMemory(rom.getAddress(2), new byte[] { 0, 0, 0, 0 });
 					for (int i = 6; i < f.length; i++) {
+						if (f[i].startsWith("reg:")) {      // reg:<name>=<hex>
+							String[] kv = f[i].substring(4).split("=");
+							emu.writeRegister(kv[0], Long.parseLong(kv[1], 16));
+							continue;
+						}
 						String[] p = f[i].split("@");
 						int w = Integer.parseInt(p[0], 16);
 						emu.writeMemory(rom.getAddress(2 * Long.parseLong(p[1], 16)),

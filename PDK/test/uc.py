@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Black-box driver for ucsim_pdk (SDCC's simulator): run one instruction from a given state, read the state back.
 One simulator process per case (the interpreter loop is asynchronous, so a persistent session is not reliable)."""
-import subprocess, os, re
+import subprocess, os, re, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import tools_path
 from multiprocessing import Pool
 
-UCSIM = os.environ.get("UCSIM_PDK") or os.path.expanduser("~/.cache/ghidra-rare-scratch/tools/sdcc-root/usr/bin/ucsim_pdk")
+UCSIM = tools_path.find("ucsim_pdk", "UCSIM_PDK")
 RAMN = 64
 
 

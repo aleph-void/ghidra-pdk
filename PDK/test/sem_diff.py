@@ -13,7 +13,7 @@ import uc
 
 # not comparable with ucsim: hardware/timing behaviour, or instructions the simulator rejects
 SKIP = {"WAIT0", "WAIT1", "TOG", "RESET", "STOPSYS", "STOPEXE", "WDRESET", "PMODE", "PUSHWPC", "POPWPC", "DELAY",
-        "ENGINT", "DISGINT", "RETI", "MUL"}
+        "ENGINT", "DISGINT", "RETI"}
 
 
 def operands(c):
@@ -75,6 +75,7 @@ def main():
     rnd = random.Random(seed)
     os.makedirs(work, exist_ok=True)
     ion = D.ionames(chip)
+    io8name = [n for n, a in ion.items() if a == 8][0]      # mulop, or io_08 on devices without a multiplier
     forms = collections.defaultdict(list)
     for l in open(gfile):
         h, n, t = l.rstrip("\n").split(" ", 2)
@@ -116,6 +117,9 @@ def main():
                     rom[0x20] = rnd.randrange(1 << W)
                 if mn in ("IGOTO", "ICALL"):
                     ram[m], ram[m + 1] = rnd.randrange(8, 0x100), 0
+                io = {}
+                if mn == "MUL":
+                    io[8] = rnd.choice([0, 1, 0x10, 0xff, rnd.randrange(256)])
                 if mn in ("LDSPTL", "LDSPTH"):
                     rom[SP] = rnd.randrange(1 << W)
                 if mn in ("RET", "RETI") or key.startswith("RET"):
@@ -128,13 +132,14 @@ def main():
                         SP = 2
                 if mn in ("PUSHAF", "PUSHW", "CALL", "ICALL") and SP > 0x3a:
                     SP = 0x30
-                cases.append(uc.Case(W, op, A, F, SP, ram, rom))
+                cases.append(uc.Case(W, op, A, F, SP, ram, rom, io))
                 meta.append((key, c))
     # Ghidra side
     cf = os.path.join(work, f"sem{W}.cases")
     with open(cf, "w") as f:
         for i, c in enumerate(cases):
-            extra = " ".join("%04x@%x" % (v, a) for a, v in c.rom.items())
+            extra = " ".join("%04x@%x" % (v, a) for a, v in c.rom.items()) + \
+                "".join(" reg:%s=%x" % (io8name, v) for a, v in c.io.items() if a == 8)
             f.write("%d %04x %02x %02x %02x %s %s\n" % (i, c.op, c.A, c.F, c.SP, "".join("%02x" % b for b in c.ram), extra))
     gout = os.path.join(work, f"sem{W}.ghidra")
     subprocess.run([os.path.join(HERE, "sem.sh"), lang, cf, gout], check=True)

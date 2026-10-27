@@ -10,7 +10,8 @@ import os, re, subprocess, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import diff_decode as D
 
-SDAS = os.path.expanduser("~/.cache/ghidra-rare-scratch/tools/sdcc-root/usr/bin/sdaspdk%d")
+import tools_path
+SDAS = "sdaspdk%d"
 SYN = {"DISGINT": "disgint", "PUSHAF": "push af", "POPAF": "pop af"}
 
 
@@ -61,7 +62,7 @@ def main():
         f.write("\t.area CODE (ABS)\n\t.org 0\n")
         for op, c in rows:
             f.write("\t" + sdas_line(c) + "\n")
-    subprocess.run([SDAS % W, "-l", "-o", "-s", src], capture_output=True, text=True, cwd=work)
+    subprocess.run([tools_path.find(SDAS % W), "-l", "-o", "-s", src], capture_output=True, text=True, cwd=work)
     lst = open(os.path.join(work, f"rt{W}.lst")).read().splitlines()
     got = {}
     for l in lst:

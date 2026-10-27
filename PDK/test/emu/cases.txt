@@ -556,3 +556,31 @@ asm MOV A,#0x12 ; ADD A,#0x34
 code 1F12 1834
 expect A 0x47
 end
+
+case mul_pdk14 isa 14
+# A * mulop (I/O 0x08) = 0xff * 0x10 = 0x0ff0: A = 0xf0, mulrh (I/O 0x09) = 0x0f
+asm MUL
+code 007C
+set A 0xFF
+set mulop 0x10
+expect A 0xF0
+expect mulrh 0x0F
+end
+
+case mul_pdk15 isa 15
+asm MUL
+code 007C
+set A 0x12
+set mulop 0x0A
+expect A 0xB4
+expect mulrh 0
+end
+
+case mul_pdk16 isa 16
+asm MUL
+code 003C
+set A 0xFF
+set mulop 0xFF
+expect A 0x01
+expect mulrh 0xFE
+end
