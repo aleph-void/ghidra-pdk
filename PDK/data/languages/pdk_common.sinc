@@ -1,137 +1,58 @@
+# Common definitions for the Padauk PDK13/14/15/16 processors.
+#
+# Address spaces (Harvard architecture):
+#   rom       code, one 16-bit word per address (addresses are WORD addresses, as in Padauk/SDCC listings)
+#   ram       data memory, bytes
+#   register  accumulator and internal state (0x00..0xff) and the I/O registers (0x100 + I/O address, 0 .. 31/63/127),
+#             which the IO forms of the instructions reach
 define endian=little;
 define alignment=2;
 
-define space rom      type=ram_space      size=2 wordsize=1 default; # ROM
-define space register type=register_space size=1;
+define space rom      type=ram_space      size=2 wordsize=2 default;
+define space ram      type=ram_space      size=2 wordsize=1;
+define space register type=register_space size=2;
 
+define register offset=0x00 size=1 [ A ];
+define register offset=0x02 size=2 [ IP ];
+define register offset=0x04 size=2 [ T16 ];      # 16 bit timer (STT16 / LDT16)
+define register offset=0x08 size=1 [ GIE ];      # global interrupt enable (ENGINT / DISGINT / RETI)
 
-define register offset=0x00 size=1 [
-	A
-];
+# io 0 and 2 exist on every device
+define register offset=0x100 size=1 [ flag ];
+define register offset=0x102 size=1 [ sp ];
 
-# IO Registers
-# This has all registers for all chips of all pdk versions 
-define register offset=0x10 size=1 [
-	# pdk13 ones
-	flag
-	sp
-	clkmd
-	inten
-	intrq
-	t16m
-	mulop
-	mulrh
-	eoscr
-	integs
-	padier
-	pbdier
-	pcdier
-	pa
-	pac
-	paph
-	pb
-	pbc
-	pbph
-	pc
-	pcc
-	pcph
-	adcc
-	adcm
-	adcrh
-	adcrl
-	adcrgc
-	misc
-	gpcc
-	gpcs
-	tm2c
-	tm2ct
-	tm2s
-	tm2b
-	tm3c
-	tm3ct
-	tm3s
-	tm3b
-	pwmg0c
-	pwmg0s
-	pwmg0dth
-	pwmg0dtl
-	pwmg0cubh
-	pwmg0cubl
-	pwmg1c
-	pwmg1s
-	pwmg1dth
-	pwmg1dtl
-	pwmg1cubh
-	pwmg1cubl
-	pwmg2c
-	pwmg2s
-	pwmg2dth
-	pwmg2dtl
-	pwmg2cubh
-	pwm2cubl
-	# - - - - - 
-	# pdk14 ones
-	pwmg2cubl
-	lpwmg0c
-	lpwmgclk
-	lpwmg0dth
-	lpwmg0dtl
-	lpwmgcubh
-	lpwmgcubl
-	lpwmg1c
-	lpwmg1dth
-	lpwmg1dtl 
-	lpwmg2c
-	lpwmg2dth
-	lpwmg2dtl				 
-	rstst
-	arcrgc
-	# pdk16 ones
-	fppen
-	gdio
-	ihrcr
-	pwmcubh
-	pwmcubl
-	pwmptr0
-	pwmptr1
-	hcc
-	hc1a
-	hc2a
-	pwmc
-	pwms
-	pwmdth
-	pwmdtl
-	plscc
-	plscs
-	plsrh
-	plsrl
-	fppa_reset
-];
-
-define register offset=0x60 size=2 [
-	Timer16
-];
-
-define bitrange ZF=flag[0,1] # Zero result
-				CF=flag[1,1] # Carry from op
-				AC=flag[2,1] # 4-bit overflow
-				OV=flag[3,1] # Sign change
+define bitrange ZF=flag[0,1]    # zero
+                CF=flag[1,1]    # carry / not borrow-free: set when a subtraction borrows
+                AC=flag[2,1]    # carry (borrow) out of bit 3
+                OV=flag[3,1]    # signed overflow
 ;
 
-
-macro ZCAO_add(a, b) {
-	ZF = (a + b) == 0;
-	AC = carry(a&0xF, b&0xF);
-	CF = carry(a, b);
-	OV = carry(a&0x7F, b&0x7F) ^ CF;
+# r = a + b + c  (c is 0 or 1)
+macro addflags(r, a, b, c) {
+	local t:2 = zext(a) + zext(b) + zext(c);
+	r = t:1;
+	ZF = (r == 0);
+	CF = (t > 0xff);
+	AC = (((a & 0xf) + (b & 0xf) + c) > 0xf);
+	OV = (((a ^ r) & (b ^ r) & 0x80) != 0);
 }
 
-macro ZCAO_sub(a, b) {
-	ZF = (a - b) == 0;
-	AC = scarry(a&0xF, b&0xF);
-	CF = scarry(a, b);
-	OV = scarry(a&0x7F, b&0x7F) ^ CF;
+# r = a - b - c  (c is 0 or 1); CF and AC are borrows
+macro subflags(r, a, b, c) {
+	r = a - b - c;
+	ZF = (r == 0);
+	local wa:2 = zext(a);
+	local wb:2 = zext(b) + zext(c);
+	CF = (wa < wb);
+	AC = ((a & 0xf) < ((b & 0xf) + c));
+	OV = (((a ^ b) & (a ^ r) & 0x80) != 0);
 }
 
-define pcodeop unknown;
-define pcodeop nop;
+define pcodeop watchdog_reset;
+define pcodeop chip_reset;
+define pcodeop stop_sys;
+define pcodeop stop_exe;
+define pcodeop delay_cycles;
+define pcodeop pmode;
+define pcodeop fppa_getpc;
+define pcodeop fppa_setpc;

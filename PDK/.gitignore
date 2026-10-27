@@ -1,0 +1,6 @@
+*.sla
+*.lock
+lib/
+build/
+dist/
+__pycache__/
