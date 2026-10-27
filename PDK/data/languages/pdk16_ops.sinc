@@ -46,7 +46,7 @@ T_k12_0: k12_0 is k12_0 { export *[rom]:1 k12_0; }
 	<ns>
 }
 :PCADD "A" is b15_0=0b0000000000010111 {
-	local t:2 = inst_start;
+	local t:2 = inst_start >> 1;
 	t = t + zext(A);
 	goto [t];
 }
@@ -92,7 +92,6 @@ T_k12_0: k12_0 is k12_0 { export *[rom]:1 k12_0; }
 	A = r;
 }
 :DELAY "A" is b15_0=0b0000000000011111 {
-	delay_cycles(A);
 	A = 0;
 }
 :WDRESET is b15_0=0b0000000000110000 {
@@ -142,13 +141,13 @@ T_k12_0: k12_0 is k12_0 { export *[rom]:1 k12_0; }
 	GIE = 1;
 	return [t];
 }
-@ifdef HAS_MUL
 :MUL is b15_0=0b0000000000111100 {
-	local p:2 = zext(A) * zext(mulop);
+	# operand register mulop = I/O 0x08, result high byte mulrh = I/O 0x09 (their names depend on the device)
+	local mo:1 = *[register]:1 0x108:2;
+	local p:2 = zext(A) * zext(mo);
 	A = p:1;
-	mulrh = p(1);
+	*[register]:1 0x109:2 = p(1);
 }
-@endif
 :PMODE k4_0 is b15_5=0b00000000010 & k4_0 {
 	pmode(k4_0:1);
 }
@@ -194,17 +193,17 @@ T_k12_0: k12_0 is k12_0 { export *[rom]:1 k12_0; }
 :ICALL MW_M8_1 is b15_9=0b0000011 & b0_0=0b1 & MW_M8_1 {
 	local t:2 = MW_M8_1;
 	local spa:2 = zext(sp);
-	local ret:2 = inst_next;
+	local ret:2 = inst_next >> 1;
 	*[ram]:2 spa = ret;
 	sp = sp + 2;
 	call [t];
 }
 :IDXM MW_M8_1,"A" is b15_9=0b0000100 & b0_0=0b0 & MW_M8_1 {
-	local p:2 = zext(MW_M8_1:1);
+	local p:2 = MW_M8_1 & 0x1ff;
 	*[ram]:1 p = A;
 }
 :IDXM "A",MW_M8_1 is b15_9=0b0000100 & b0_0=0b1 & MW_M8_1 {
-	local p:2 = zext(MW_M8_1:1);
+	local p:2 = MW_M8_1 & 0x1ff;
 	A = *[ram]:1 p;
 }
 :LDTABL MW_M8_1 is b15_9=0b0000101 & b0_0=0b0 & MW_M8_1 {
@@ -218,7 +217,6 @@ T_k12_0: k12_0 is k12_0 { export *[rom]:1 k12_0; }
 	A = w(1);
 }
 :DELAY "#"^k7_0 is b15_8=0b00001110 & k7_0 {
-	delay_cycles(k7_0:1);
 	A = 0;
 }
 :RET "#"^k7_0 is b15_8=0b00001111 & k7_0 {
@@ -370,18 +368,18 @@ T_k12_0: k12_0 is k12_0 { export *[rom]:1 k12_0; }
 }
 :NADD "A",M_M8_0 is b15_9=0b0011010 & M_M8_0 {
 	local a:1 = M_M8_0;
-	local b:1 = A;
+	local b:1 = -A;
 	local c:1 = 0;
 	local r:1;
-	subflags(r, a, b, c);
+	addflags(r, a, b, c);
 	A = r;
 }
 :NADD M_M8_0,"A" is b15_9=0b0011011 & M_M8_0 {
 	local a:1 = A;
-	local b:1 = M_M8_0;
+	local b:1 = -M_M8_0;
 	local c:1 = 0;
 	local r:1;
-	subflags(r, a, b, c);
+	addflags(r, a, b, c);
 	M_M8_0 = r;
 }
 :CEQSN "A",M_M8_0 is b15_9=0b0011100 & M_M8_0 & skiptgt {
@@ -624,7 +622,6 @@ T_k12_0: k12_0 is k12_0 { export *[rom]:1 k12_0; }
 	M_M8_0 = r;
 }
 :DELAY M_M8_0 is b15_9=0b0111111 & M_M8_0 {
-	delay_cycles(M_M8_0);
 	A = 0;
 }
 :T0SN M_M8_0^"."^n11_9 is b15_12=0b1000 & M_M8_0 & n11_9 & skiptgt {
@@ -656,7 +653,7 @@ T_k12_0: k12_0 is k12_0 { export *[rom]:1 k12_0; }
 }
 :CALL T_k12_0 is b15_13=0b111 & T_k12_0 {
 	local spa:2 = zext(sp);
-	local ret:2 = inst_next;
+	local ret:2 = inst_next >> 1;
 	*[ram]:2 spa = ret;
 	sp = sp + 2;
 	call T_k12_0;

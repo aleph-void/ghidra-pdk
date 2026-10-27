@@ -64,10 +64,10 @@ def sem(form, W):
         "POPAF": "\tsp = sp - 2;\n\tlocal spa:2 = zext(sp);\n\tA = *[ram]:1 spa;\n\tspa = spa + 1;\n\tflag = *[ram]:1 spa;\n",
         "RET": "\tsp = sp - 2;\n\tlocal spa:2 = zext(sp);\n\tlocal t:2 = *[ram]:2 spa;\n\treturn [t];\n",
         "RETI": "\tsp = sp - 2;\n\tlocal spa:2 = zext(sp);\n\tlocal t:2 = *[ram]:2 spa;\n\tGIE = 1;\n\treturn [t];\n",
-        "MUL": "\tlocal p:2 = zext(A) * zext(mulop);\n\tA = p:1;\n\tmulrh = p(1);\n",
-        "LDSPTL": "\tlocal ca:2 = zext(sp);\n\tlocal w:2 = *[rom]:2 ca;\n\tA = w:1;\n",
-        "LDSPTH": "\tlocal ca:2 = zext(sp);\n\tlocal w:2 = *[rom]:2 ca;\n\tA = w(1);\n",
-        "PCADD": "\tlocal t:2 = inst_start;\n\tt = t + zext(A);\n\tgoto [t];\n",
+        "MUL": "\t# operand register mulop = I/O 0x08, result high byte mulrh = I/O 0x09 (their names depend on the device)\n\tlocal mo:1 = *[register]:1 0x108:2;\n\tlocal p:2 = zext(A) * zext(mo);\n\tA = p:1;\n\t*[register]:1 0x109:2 = p(1);\n",
+        "LDSPTL": "\tlocal spa:2 = zext(sp);\n\tlocal ca:2 = *[ram]:2 spa;\n\tlocal w:2 = *[rom]:2 ca;\n\tA = w:1;\n",
+        "LDSPTH": "\tlocal spa:2 = zext(sp);\n\tlocal ca:2 = *[ram]:2 spa;\n\tlocal w:2 = *[rom]:2 ca;\n\tA = w(1);\n",
+        "PCADD": "\tlocal t:2 = inst_start >> 1;\n\tt = t + zext(A);\n\tgoto [t];\n",
     }
     if not ops and mn in simple:
         return simple[mn]
@@ -111,20 +111,20 @@ def sem(form, W):
         if mn == "CLEAR":
             return w("0")
         if mn == "DELAY":
-            return "\tdelay_cycles(" + x + ");\n\tA = 0;\n"
+            return "\tA = 0;\n"       # the delay itself (x+1 cycles) is timing, not state
         if mn == "PCADD":
             return simple["PCADD"]
         return None
 
     if mn == "DELAY" and ops == ["K"]:
-        return "\tdelay_cycles(K);\n\tA = 0;\n"
+        return "\tA = 0;\n"
     if ops == ["A"]:
         return single("A", lambda r: f"\tA = {r};\n")
     if ops == ["M"]:
         if mn == "XCH":
             return "\tlocal t:1 = M;\n\tM = A;\n\tA = t;\n"
         if mn == "DELAY":
-            return "\tdelay_cycles(M);\n\tA = 0;\n"
+            return "\tA = 0;\n"
         return single("M", lambda r: f"\tM = {r};\n")
     # --- two-operand ALU
     if len(ops) == 2:
@@ -155,16 +155,18 @@ def sem(form, W):
             return subf(dst, src, "0", None) + skip_if("r != 0")
         if mn == "COMP":
             return subf(dst, src, "0", None)
-        if mn == "NADD":   # d <- s + NEG(d) = s - d
-            return subf(src, dst, "0", wr)
+        if mn == "NADD":   # d <- s + NEG(d): an addition, so the flags are those of an addition
+            return addf(dst, src, "-" + dst, "0", wr)
         if mn == "NMOV":
             if d == "A":
                 return f"\tlocal r:1 = -{src};\n" + ZF + "\tA = r;\n"
             return f"\t{dst} = -{src};\n"
         if mn == "IDXM":
+            # the pointer is the byte at M (data memory up to 256 bytes); PDK16 has 9 bit data addresses: the word at M
+            ptr = "\tlocal p:2 = MW & 0x1ff;\n" if W == 16 else "\tlocal p:2 = zext(MW:1);\n"
             if d == "A":
-                return "\tlocal p:2 = zext(MW:1);\n\tA = *[ram]:1 p;\n"
-            return "\tlocal p:2 = zext(MW:1);\n\t*[ram]:1 p = A;\n"
+                return ptr + "\tA = *[ram]:1 p;\n"
+            return ptr + "\t*[ram]:1 p = A;\n"
     # --- word memory / table forms (operand MW)
     if ops == ["MW"]:
         raise AssertionError
@@ -184,7 +186,7 @@ def sem_word(form, W):
     if mn == "IGOTO":
         return "\tlocal t:2 = MW;\n\tgoto [t];\n"
     if mn == "ICALL":
-        return ("\tlocal t:2 = MW;\n\tlocal spa:2 = zext(sp);\n\tlocal ret:2 = inst_next;\n\t*[ram]:2 spa = ret;\n"
+        return ("\tlocal t:2 = MW;\n\tlocal spa:2 = zext(sp);\n\tlocal ret:2 = inst_next >> 1;\n\t*[ram]:2 spa = ret;\n"
                 "\tsp = sp + 2;\n\tcall [t];\n")
     if mn in ("LDTABL", "LDTABH"):
         lo = mn == "LDTABL"
@@ -331,7 +333,7 @@ def gen(W, tab, outdir):
             if mn == "GOTO":
                 b = f"\tgoto T_{nm};\n"
             else:
-                b = ("\tlocal spa:2 = zext(sp);\n\tlocal ret:2 = inst_next;\n\t*[ram]:2 spa = ret;\n\tsp = sp + 2;\n"
+                b = ("\tlocal spa:2 = zext(sp);\n\tlocal ret:2 = inst_next >> 1;\n\t*[ram]:2 spa = ret;\n\tsp = sp + 2;\n"
                      f"\tcall T_{nm};\n")
         elif form == "RET k":
             b = ("\tA = " + opfield["k"][0] + ":1;\n"
@@ -359,10 +361,7 @@ def gen(W, tab, outdir):
         if SKIP in b:
             syms.append(SKIP)
         text = ":" + mn + (" " + ",".join(shown) if shown else "") + " is " + " & ".join(constraint + syms)
-        if mn == "MUL":
-            body.append("@ifdef HAS_MUL\n" + text + " {\n" + b + "}\n@endif\n")
-        else:
-            body.append(text + " {\n" + b + "}\n")
+        body.append(text + " {\n" + b + "}\n")
         count += 1
     # sub tables and skip target
     out.append("skiptgt: addr is epsilon [ addr = inst_next + 1; ] { export *[rom]:1 addr; }\n\n")

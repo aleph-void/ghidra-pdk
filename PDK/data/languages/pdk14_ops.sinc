@@ -9,12 +9,14 @@ T_k10_0: k10_0 is k10_0 { export *[rom]:1 k10_0; }
 :NOP is b13_0=0b00000000000000 {
 }
 :LDSPTL is b13_0=0b00000000000110 {
-	local ca:2 = zext(sp);
+	local spa:2 = zext(sp);
+	local ca:2 = *[ram]:2 spa;
 	local w:2 = *[rom]:2 ca;
 	A = w:1;
 }
 :LDSPTH is b13_0=0b00000000000111 {
-	local ca:2 = zext(sp);
+	local spa:2 = zext(sp);
+	local ca:2 = *[ram]:2 spa;
 	local w:2 = *[rom]:2 ca;
 	A = w(1);
 }
@@ -57,7 +59,7 @@ T_k10_0: k10_0 is k10_0 { export *[rom]:1 k10_0; }
 	<ns>
 }
 :PCADD "A" is b13_0=0b00000001100111 {
-	local t:2 = inst_start;
+	local t:2 = inst_start >> 1;
 	t = t + zext(A);
 	goto [t];
 }
@@ -149,13 +151,13 @@ T_k10_0: k10_0 is k10_0 { export *[rom]:1 k10_0; }
 	GIE = 1;
 	return [t];
 }
-@ifdef HAS_MUL
 :MUL is b13_0=0b00000001111100 {
-	local p:2 = zext(A) * zext(mulop);
+	# operand register mulop = I/O 0x08, result high byte mulrh = I/O 0x09 (their names depend on the device)
+	local mo:1 = *[register]:1 0x108:2;
+	local p:2 = zext(A) * zext(mo);
 	A = p:1;
-	mulrh = p(1);
+	*[register]:1 0x109:2 = p(1);
 }
-@endif
 :XOR ioa,"A" is b13_6=0b00000011 & ioa {
 	ioa = ioa ^ A;
 }
@@ -211,18 +213,18 @@ T_k10_0: k10_0 is k10_0 { export *[rom]:1 k10_0; }
 }
 :NADD "A",M_M6_0 is b13_7=0b0001110 & M_M6_0 {
 	local a:1 = M_M6_0;
-	local b:1 = A;
+	local b:1 = -A;
 	local c:1 = 0;
 	local r:1;
-	subflags(r, a, b, c);
+	addflags(r, a, b, c);
 	A = r;
 }
 :NADD M_M6_0,"A" is b13_7=0b0001111 & M_M6_0 {
 	local a:1 = A;
-	local b:1 = M_M6_0;
+	local b:1 = -M_M6_0;
 	local c:1 = 0;
 	local r:1;
-	subflags(r, a, b, c);
+	addflags(r, a, b, c);
 	M_M6_0 = r;
 }
 :ADD M_M6_0,"A" is b13_7=0b0010000 & M_M6_0 {
@@ -552,7 +554,7 @@ T_k10_0: k10_0 is k10_0 { export *[rom]:1 k10_0; }
 }
 :CALL T_k10_0 is b13_11=0b111 & T_k10_0 {
 	local spa:2 = zext(sp);
-	local ret:2 = inst_next;
+	local ret:2 = inst_next >> 1;
 	*[ram]:2 spa = ret;
 	sp = sp + 2;
 	call T_k10_0;

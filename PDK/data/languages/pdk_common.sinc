@@ -52,7 +52,6 @@ define pcodeop watchdog_reset;
 define pcodeop chip_reset;
 define pcodeop stop_sys;
 define pcodeop stop_exe;
-define pcodeop delay_cycles;
 define pcodeop pmode;
 define pcodeop fppa_getpc;
 define pcodeop fppa_setpc;
